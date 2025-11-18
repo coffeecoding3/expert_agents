@@ -1,0 +1,2561 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAIA Chat Test</title>
+    <style>
+        /* ===== RESET & BASE ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 10px;
+            margin: 0;
+        }
+
+        /* ===== LAYOUT ===== */
+        .main-container {
+            max-width: 100%;
+            margin: 0 auto;
+            display: flex;
+            gap: 15px;
+            height: calc(100vh - 20px);
+            min-height: 600px;
+        }
+
+        .chat-container, .execution-log {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            height: 100%;
+        }
+
+        /* ===== RESIZER ===== */
+        .vertical-resizer {
+            width: 6px;
+            cursor: col-resize;
+            background: rgba(102, 126, 234, 0.15);
+            border-radius: 6px;
+            align-self: stretch;
+            flex: 0 0 6px;
+            transition: background-color 0.2s;
+        }
+
+        .vertical-resizer:hover,
+        .vertical-resizer.active {
+            background: rgba(102, 126, 234, 0.35);
+        }
+
+        .main-container.resizing {
+            user-select: none;
+            cursor: col-resize;
+        }
+
+        .chat-container { 
+            flex: 3; 
+            min-width: 0;
+        }
+        .execution-log { 
+            flex: 1; 
+            display: flex;
+            flex-direction: column;
+            min-width: 300px;
+        }
+        
+        /* 로그가 숨겨졌을 때 채팅 컨테이너가 전체 너비를 차지하도록 */
+        .execution-log.collapsed {
+            flex: 0;
+            min-width: 0;
+            width: auto;
+            overflow: hidden;
+        }
+        
+        .execution-log.collapsed .log-content {
+            display: none;
+        }
+        
+        /* 로그가 접혔을 때 헤더만 보이도록 */
+        .execution-log.collapsed .log-header {
+            display: flex;
+            min-width: 200px;
+            width: auto;
+        }
+        
+        .chat-container.full-width {
+            flex: 1;
+            width: 100%;
+        }
+
+        /* ===== HEADERS ===== */
+        .chat-header, .log-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+        }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dee2e6;
+            flex-shrink: 0;
+        }
+
+        .chat-header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .chat-header p, .log-header h3 {
+            opacity: 0.9;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        /* ===== CONFIG SECTION ===== */
+        .config-section {
+            background: #f8f9fa;
+            border-bottom: 1px solid #e1e5e9;
+        }
+
+        .config-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            cursor: pointer;
+            background: #e9ecef;
+            border-bottom: 1px solid #dee2e6;
+            transition: background-color 0.2s;
+        }
+
+        .config-header:hover {
+            background: #dee2e6;
+        }
+
+        .config-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .config-toggle {
+            font-size: 12px;
+            color: #6c757d;
+            transition: transform 0.2s;
+        }
+
+        .config-content {
+            padding: 12px 20px;
+            transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+            overflow: hidden;
+        }
+
+        .config-content.collapsed {
+            max-height: 0;
+            padding: 0 20px;
+            opacity: 0;
+        }
+
+        .config-row {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .config-row:last-child { margin-bottom: 0; }
+
+        .config-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            min-width: 80px;
+        }
+
+        .config-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 12px;
+        }
+
+        .tool-filter-btn {
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            border-radius: 20px;
+            background: white;
+            color: #667eea;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .tool-filter-btn:hover {
+            background: #f0f4ff;
+            transform: translateY(-1px);
+        }
+
+        .tool-filter-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+        }
+
+        /* ===== CHAT MESSAGES ===== */
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            min-height: 0;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .message.user { justify-content: flex-end; }
+
+        .message-content {
+            max-width: 85%;
+            padding: 15px 20px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            line-height: 1.6;
+            font-size: 15px;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #e1e5e9;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.assistant .message-content.streaming {
+            background: #f0f8ff;
+            border-color: #667eea;
+            animation: streaming-pulse 2s ease-in-out infinite;
+        }
+
+        /* ===== EVENT TYPE SPECIFIC STYLES ===== */
+        .message.assistant .message-content.event-llm {
+            background: #e8f5e8;
+            border-color: #4caf50;
+            border-left: 4px solid #4caf50;
+            margin-bottom: 8px;
+        }
+
+        .message.assistant .message-content.event-multi-llm {
+            background: #f3e5f5;
+            border-color: #9c27b0;
+            border-left: 4px solid #9c27b0;
+            margin-bottom: 8px;
+        }
+
+
+        .message.assistant .message-content.event-action-button {
+            background: #fff9c4;
+            border-color: #f57f17;
+        }
+
+        .message.assistant .message-content.event-user-search {
+            background: #e1f5fe;
+            border-color: #00bcd4;
+        }
+
+        .message.assistant .message-content.event-mail-to-event {
+            background: #f1f8e9;
+            border-color: #689f38;
+        }
+
+        .message.assistant .message-content.event-mail-todo-briefing {
+            background: #fce4ec;
+            border-color: #e91e63;
+        }
+
+        .message.assistant .message-content.event-mail-link {
+            background: #e8eaf6;
+            border-color: #3f51b5;
+        }
+
+        .message.assistant .message-content.event-event-link {
+            background: #e0f2f1;
+            border-color: #009688;
+        }
+
+        .message.assistant .message-content.event-person-in-charge-search {
+            background: #fff8e1;
+            border-color: #ffc107;
+        }
+
+        .message.assistant .message-content.event-documents {
+            background: #f3e5f5;
+            border-color: #9c27b0;
+        }
+
+        .message.assistant .message-content.event-question-suggest {
+            background: #e8f5e9;
+            border-color: #4caf50;
+            padding: 12px 16px;
+        }
+
+        .question-suggest-item {
+            background: white;
+            border: 2px solid #4caf50;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin: 8px 0;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .question-suggest-item:hover {
+            background: #f1f8e9;
+            border-color: #689f38;
+            transform: translateX(4px);
+            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.2);
+        }
+
+        .question-suggest-item:active {
+            transform: translateX(2px);
+        }
+
+        .message.assistant .message-content.event-status {
+            background: #fff3e0;
+            border-color: #ff9800;
+            border-left: 4px solid #ff9800;
+            font-style: italic;
+            color: #666;
+        }
+
+        .status-icon {
+            display: inline-block;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .message.assistant .message-content.event-error {
+            background: #ffebee;
+            border-color: #f44336;
+        }
+
+        /* ===== MARKDOWN STYLES ===== */
+        .message-content h1, .message-content h2, .message-content h3, 
+        .message-content h4, .message-content h5, .message-content h6 {
+            margin: 12px 0 8px 0;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+
+        .message-content h1 { font-size: 1.5em; color: #333; }
+        .message-content h2 { font-size: 1.3em; color: #444; }
+        .message-content h3 { font-size: 1.2em; color: #555; }
+        .message-content h4 { font-size: 1.1em; color: #666; }
+        .message-content h5 { font-size: 1em; color: #777; }
+        .message-content h6 { font-size: 0.9em; color: #888; }
+
+        .message-content code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #e74c3c;
+        }
+
+        .message-content pre {
+            background: #f8f9fa;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 8px 0;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+
+        .message-content pre code {
+            background: none;
+            padding: 0;
+            color: #333;
+            border-radius: 0;
+        }
+
+        .message-content ul, .message-content ol {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        .message-content li {
+            margin: 4px 0;
+            line-height: 1.4;
+        }
+
+        .message-content blockquote {
+            border-left: 4px solid #667eea;
+            background: #f8f9fa;
+            margin: 8px 0;
+            padding: 8px 16px;
+            font-style: italic;
+            color: #666;
+        }
+
+        .message-content hr {
+            border: none;
+            border-top: 2px solid #e1e5e9;
+            margin: 16px 0;
+        }
+
+        .message-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 12px 0;
+            font-size: 0.9em;
+        }
+
+        .message-content th, .message-content td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .message-content th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .message-content tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .message-content del {
+            text-decoration: line-through;
+            color: #999;
+        }
+
+        .message-content a {
+            color: #667eea;
+            text-decoration: underline;
+        }
+
+        .message-content a:hover {
+            color: #5a6fd8;
+        }
+
+
+        /* ===== MULTI_LLM ROLE SPECIFIC STYLES ===== */
+        .message.assistant .message-content.role-host {
+            background: #e8f5e8;
+            border-color: #4caf50;
+            border-left: 4px solid #4caf50;
+            margin-bottom: 8px;
+        }
+
+        .message.assistant .message-content.role-crisis-expert {
+            background: #ffebee;
+            border-color: #f44336;
+            border-left: 4px solid #f44336;
+            margin-bottom: 8px;
+        }
+
+        .message.assistant .message-content.role-global-marketing-expert {
+            background: #e3f2fd;
+            border-color: #2196f3;
+            border-left: 4px solid #2196f3;
+            margin-bottom: 8px;
+        }
+
+        .message.assistant .message-content.role-product-expert {
+            background: #f3e5f5;
+            border-color: #9c27b0;
+            border-left: 4px solid #9c27b0;
+            margin-bottom: 8px;
+        }
+
+        .message.assistant .message-content.role-cx-expert {
+            background: #fff3e0;
+            border-color: #ff9800;
+            border-left: 4px solid #ff9800;
+            margin-bottom: 8px;
+        }
+
+        .message.assistant .message-content.role-trend-expert {
+            background: #e0f2f1;
+            border-color: #009688;
+            border-left: 4px solid #009688;
+            margin-bottom: 8px;
+        }
+
+        .message.assistant .message-content.role-startup-expert {
+            background: #f1f8e9;
+            border-color: #689f38;
+            border-left: 4px solid #689f38;
+            margin-bottom: 8px;
+        }
+
+        .message.assistant .message-content.role-brand-expert {
+            background: #fff9c4;
+            border-color: #f57f17;
+            border-left: 4px solid #f57f17;
+            margin-bottom: 8px;
+        }
+
+        /* ===== INPUT SECTION ===== */
+        .chat-input-container {
+            padding: 15px 20px;
+            background: white;
+            border-top: 1px solid #e1e5e9;
+            flex-shrink: 0;
+        }
+
+        .chat-input-form {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 14px 18px;
+            border: 2px solid #e1e5e9;
+            border-radius: 25px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .chat-input:focus { border-color: #667eea; }
+
+        .send-button, .test-button {
+            padding: 14px 26px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .send-button:hover, .test-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .send-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .test-button {
+            background: #4CAF50;
+            padding: 8px 16px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        /* ===== STATUS & INDICATORS ===== */
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-connected { background: #28a745; }
+        .status-disconnected { background: #dc3545; }
+        .status-connecting {
+            background: #ffc107;
+            animation: pulse 1s infinite;
+        }
+
+        .typing-indicator {
+            display: none;
+            align-items: center;
+            color: #666;
+            font-style: italic;
+            margin-bottom: 15px;
+        }
+
+        .typing-indicator.show { display: flex; }
+
+        .typing-dots {
+            display: inline-block;
+            margin-left: 5px;
+        }
+
+        .typing-dots span {
+            display: inline-block;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #666;
+            margin: 0 1px;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        .typing-cursor {
+            color: #667eea;
+            font-weight: bold;
+            animation: blink 1s infinite;
+        }
+
+        /* ===== LOG SECTION ===== */
+        .log-content {
+            padding: 10px 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+            scrollbar-width: thin;
+            scrollbar-color: #667eea #f1f1f1;
+        }
+
+        .log-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .log-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .log-content::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 4px;
+        }
+
+        .log-content::-webkit-scrollbar-thumb:hover {
+            background: #5a6fd8;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+
+        .log-entry.processing { color: #007bff; }
+        .log-entry.completed { color: #28a745; }
+        .log-entry.error { color: #dc3545; }
+        .log-entry.streaming { color: #6f42c1; }
+        .log-entry.warning { color: #ffc107; }
+        .log-entry.debug { color: #6c757d; }
+        .log-entry.info { color: #17a2b8; }
+
+        .log-timestamp {
+            color: #6c757d;
+            margin-right: 8px;
+        }
+
+        .toggle-log-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .toggle-log-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* ===== ANIMATIONS ===== */
+        @keyframes streaming-pulse {
+            0%, 100% { 
+                background: #f0f8ff;
+                border-color: #667eea;
+            }
+            50% { 
+                background: #e6f3ff;
+                border-color: #5a6fd8;
+            }
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Chat Container -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <h1>🤖 CAIA Chat Test</h1>
+                <p>
+                    <span class="status-indicator" id="statusIndicator"></span>
+                    <span id="statusText">연결 대기 중...</span>
+                </p>
+            </div>
+
+            <div class="config-section">
+                <div class="config-header" onclick="toggleConfig()">
+                    <span class="config-title">⚙️ 설정</span>
+                    <span class="config-toggle" id="configToggle">▼</span>
+                </div>
+                <div class="config-content" id="configContent">
+                    <div class="config-row">
+                        <span class="config-label">API URL:</span>
+                        <!-- <input type="text" id="apiUrl" class="config-input" value="http://localhost:8888/caia/api/v1/chat/stream"> -->
+                        <input type="text" id="apiUrl" class="config-input" value="https://dev.eaip.lge.com:30540/caia/api/v1/chat/stream">
+                    </div>
+                    <div class="config-row">
+                        <span class="config-label">Session ID:</span>
+                        <input type="text" id="sessionId" class="config-input" placeholder="세션 ID (비워두면 자동 생성)" value="">
+                        <small style="color: #6c757d; margin-left: 10px;">같은 세션에서 대화 연속성 유지</small>
+                    </div>
+                    <div class="config-row">
+                        <span class="config-label">SSO Cookie:</span>
+                        <input type="text" id="cookieValue" class="config-input" placeholder="ssolgenet_exa 값 입력..." value="id%3DbUINZLKeUBfxlfJwCEzM845l495BUO70GnNR3XQoYR4yMDI1MDkyODIzNTQxNQ%3D%3D">
+                    </div>
+                    <div class="config-row">
+                        <span class="config-label">User ID:</span>
+                        <input type="text" id="userId" class="config-input" value="" readonly style="background-color: #f8f9fa; color: #6c757d;">
+                        <small style="color: #6c757d; margin-left: 10px;">SSO 로그인에서 자동 추출</small>
+                    </div>
+                    <div class="config-row">
+                        <span class="config-label">도구 필터:</span>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; flex: 1;">
+                            <button type="button" class="tool-filter-btn" data-tool="gemini_web_search" id="tool-gemini_web_search">
+                                🔍 웹검색
+                            </button>
+                            <button type="button" class="tool-filter-btn" data-tool="llm_knowledge" id="tool-llm_knowledge">
+                                📚 기본지식
+                            </button>
+                            <button type="button" class="tool-filter-btn" data-tool="internal_knowledge" id="tool-internal_knowledge">
+                                🏢 사내지식
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <div class="message assistant">
+                    <div class="message-content">
+                        당신을 위한 토론 에이전트 CAIA입니다. 🎉<br>
+                        질문을 입력해보세요!
+                    </div>
+                </div>
+            </div>
+            
+        <div class="typing-indicator" id="typingIndicator">
+            <span id="typingText">CAIA가 생각 중 입니다<div class=""></div></span>
+            <div class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+
+            <div class="chat-input-container">
+                <form class="chat-input-form" id="chatForm">
+                    <input type="text" id="chatInput" class="chat-input" placeholder="메시지를 입력하세요..." autocomplete="off">
+                    <button type="submit" class="send-button" id="sendButton">전송</button>
+                </form>
+                <div class="test-buttons" style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button onclick="newSession()" class="test-button" style="background: #17a2b8;">🆔 새 대화</button>
+                    <button onclick="toggleLog()" class="test-button" style="background: #6c757d;">📋 로그</button>
+                    <button onclick="testUserSearch()" class="test-button" style="display: none;">👤 사용자 검색</button>
+                    <button onclick="testDocuments()" class="test-button" style="display: none;">📚 문서 검색</button>
+                    <button onclick="testActionButton()" class="test-button" style="display: none;">🔘 액션 버튼</button>
+                    <button onclick="testMailToEvent()" class="test-button" style="display: none;">📧 이메일→일정</button>
+                </div>
+            </div>
+        </div>
+        <div class="vertical-resizer" id="verticalResizer" aria-label="Resize panels" title="드래그하여 크기 조절"></div>
+        <!-- Execution Log -->
+        <div class="execution-log">
+            <div class="log-header">
+                <h3>🔍 실행 과정 로그</h3>
+                <button onclick="toggleLog()" class="toggle-log-btn" id="logToggleBtn">접기</button>
+            </div>
+            <div class="log-content" id="logContent">
+                <div class="log-entry info">
+                    <span class="log-timestamp">[시작]</span>
+                    채팅 테스트 준비 완료
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== UTILITY FUNCTIONS =====
+        const Utils = {
+            generateUUID() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    const r = Math.random() * 16 | 0;
+                    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            },
+
+            formatResponse(text) {
+                if (!text) return '';
+                
+                let formatted = text;
+                
+                // Code blocks (```code```) - must be processed before inline code
+                formatted = formatted.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+                
+                // Inline code (`code`)
+                formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+                
+                // Headers (# ## ### #### ##### ######)
+                formatted = formatted.replace(/^#{6}\s+(.+)$/gm, '<h6>$1</h6>');
+                formatted = formatted.replace(/^#{5}\s+(.+)$/gm, '<h5>$1</h5>');
+                formatted = formatted.replace(/^#{4}\s+(.+)$/gm, '<h4>$1</h4>');
+                formatted = formatted.replace(/^#{3}\s+(.+)$/gm, '<h3>$1</h3>');
+                formatted = formatted.replace(/^#{2}\s+(.+)$/gm, '<h2>$1</h2>');
+                formatted = formatted.replace(/^#{1}\s+(.+)$/gm, '<h1>$1</h1>');
+                
+                // Bold text (**text** or __text__)
+                formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                formatted = formatted.replace(/__(.*?)__/g, '<strong>$1</strong>');
+                
+                // Italic text (*text* or _text_)
+                formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                formatted = formatted.replace(/_(.*?)_/g, '<em>$1</em>');
+                
+                // Strikethrough (~~text~~)
+                formatted = formatted.replace(/~~(.*?)~~/g, '<del>$1</del>');
+                
+                // Links [text](url)
+                formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" style="color: #667eea; text-decoration: underline;">$1</a>');
+                
+                // Images ![alt](url)
+                formatted = formatted.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0;">');
+                
+                // Horizontal rules (--- or ***)
+                formatted = formatted.replace(/^---$/gm, '<hr>');
+                formatted = formatted.replace(/^\*\*\*$/gm, '<hr>');
+                
+                // Blockquotes (> text)
+                formatted = formatted.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
+                
+                // Unordered lists (- item or * item)
+                formatted = formatted.replace(/^[\s]*[-*]\s+(.+)$/gm, '<li>$1</li>');
+                formatted = formatted.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+                
+                // Ordered lists (1. item)
+                formatted = formatted.replace(/^[\s]*\d+\.\s+(.+)$/gm, '<li>$1</li>');
+                
+                // Tables (basic support)
+                const lines = formatted.split('\n');
+                let inTable = false;
+                let tableHtml = '';
+                let processedLines = [];
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const nextLine = lines[i + 1];
+                    
+                    // Check if this is a table header (contains |)
+                    if (line.includes('|') && !line.trim().startsWith('<')) {
+                        if (!inTable) {
+                            inTable = true;
+                            tableHtml = '<table style="border-collapse: collapse; width: 100%; margin: 10px 0;">';
+                        }
+                        
+                        // Skip separator lines (|---|---|)
+                        if (line.match(/^\s*\|?[\s\-\|]+\|?\s*$/)) {
+                            continue;
+                        }
+                        
+                        // Process table row
+                        const cells = line.split('|').map(cell => cell.trim()).filter(cell => cell);
+                        const isHeader = i === 0 || (nextLine && nextLine.match(/^\s*\|?[\s\-\|]+\|?\s*$/));
+                        const tag = isHeader ? 'th' : 'td';
+                        
+                        tableHtml += '<tr>';
+                        cells.forEach(cell => {
+                            tableHtml += `<${tag} style="border: 1px solid #ddd; padding: 8px; text-align: left;">${cell}</${tag}>`;
+                        });
+                        tableHtml += '</tr>';
+                    } else {
+                        if (inTable) {
+                            tableHtml += '</table>';
+                            processedLines.push(tableHtml);
+                            inTable = false;
+                            tableHtml = '';
+                        }
+                        processedLines.push(line);
+                    }
+                }
+                
+                if (inTable) {
+                    tableHtml += '</table>';
+                    processedLines.push(tableHtml);
+                }
+                
+                formatted = processedLines.join('\n');
+                
+                // Convert line breaks to <br> (but preserve existing HTML)
+                formatted = formatted.replace(/\n/g, '<br>');
+                
+                return formatted;
+            },
+
+            getCurrentTime() {
+                return new Date().toLocaleTimeString();
+            }
+        };
+
+        // ===== DISCUSSION MANAGER =====
+        class DiscussionManager {
+            constructor() {
+                this.speeches = []; // 발화 목록 (순서대로)
+                this.currentSpeech = null; // 현재 진행 중인 발화
+                this.info = {
+                    topic: '',
+                    speakers: [],
+                    speakersText: '',
+                    materials: '',
+                    summary: ''
+                };
+            }
+
+            reset() {
+                this.speeches = [];
+                this.currentSpeech = null;
+                this.info = {
+                    topic: '',
+                    speakers: [],
+                    speakersText: '',
+                    materials: '',
+                    summary: ''
+                };
+            }
+
+            getSpeakerColors() {
+                return {
+                    '마케팅·브랜드 전략 전문가': '#E3F2FD',
+                    '문화·라이프스타일 트렌드 전문가': '#F3E5F5',
+                    '혁신·스타트업 동향 전문가': '#E8F5E8',
+                    '고객경험(CX)·서비스 혁신 전문가': '#FFF3E0',
+                    '제품·기술 혁신(R&D) 전문가': '#FCE4EC',
+                    '토론 진행자': '#F5F5F5'
+                };
+            }
+
+            getSpeakerBorderColors() {
+                return {
+                    '마케팅·브랜드 전략 전문가': '#2196F3',
+                    '문화·라이프스타일 트렌드 전문가': '#9C27B0',
+                    '혁신·스타트업 동향 전문가': '#4CAF50',
+                    '고객경험(CX)·서비스 혁신 전문가': '#FF9800',
+                    '제품·기술 혁신(R&D) 전문가': '#E91E63',
+                    '토론 진행자': '#757575'
+                };
+            }
+
+            // 토큰을 현재 발화에 추가
+            addToken(token, speaker, isComplete) {
+                // 발화자가 바뀌었거나 새로운 발화가 필요한 경우
+                if (!this.currentSpeech || 
+                    this.currentSpeech.speaker !== speaker || 
+                    this.currentSpeech.isComplete) {
+                    
+                    
+                    // 이전 발화가 있으면 완료 처리
+                    if (this.currentSpeech) {
+                        this.currentSpeech.isComplete = true;
+                    }
+                    
+                    // 새로운 발화 시작
+                    this.currentSpeech = {
+                        speaker: speaker,
+                        content: '',
+                        isComplete: false
+                    };
+                    this.speeches.push(this.currentSpeech);
+                }
+
+                // 토큰 추가 (빈 토큰이 아닌 경우에만)
+                if (this.currentSpeech && token && token.trim() !== '') {
+                    this.currentSpeech.content += token;
+                }
+                
+                // 완료 상태 업데이트 (토큰이 빈 경우에도 완료 상태는 업데이트)
+                if (this.currentSpeech) {
+                    this.currentSpeech.isComplete = isComplete;
+                }
+            }
+
+            generateDiscussionHTML() {
+                let content = '';
+
+                // 토론 정보
+                if (this.info.topic) {
+                    const isTyping = this.info.topic && !this.info.topic.endsWith('.') && !this.info.topic.endsWith('!') && !this.info.topic.endsWith('?');
+                    content += this.createInfoBlock('🎯 토론 주제', this.info.topic, '#E8F5E8', '#4CAF50', isTyping);
+                }
+
+                if (this.info.speakersText || (this.info.speakers && this.info.speakers.length > 0)) {
+                    const speakersText = this.info.speakersText || this.info.speakers.join(', ');
+                    const isTyping = this.info.speakersText && !this.info.speakersText.endsWith('.') && !this.info.speakersText.endsWith('!') && !this.info.speakersText.endsWith('?');
+                    content += this.createInfoBlock('👥 참여 전문가', speakersText, '#E3F2FD', '#2196F3', isTyping);
+                }
+
+                if (this.info.materials) {
+                    const isTyping = this.info.materials && !this.info.materials.endsWith('.') && !this.info.materials.endsWith('!') && !this.info.materials.endsWith('?');
+                    content += this.createInfoBlock('📚 참고 자료', this.info.materials, '#FFF3E0', '#FF9800', isTyping);
+                }
+
+                // 발화 목록 표시
+                for (const speech of this.speeches) {
+                    if (speech.content.trim()) {
+                        const speakerColor = this.getSpeakerColors()[speech.speaker] || '#F5F5F5';
+                        const borderColor = this.getSpeakerBorderColors()[speech.speaker] || '#757575';
+                        const showTypingCursor = !speech.isComplete;
+
+                        content += this.createSpeechBlock(speech.speaker, speech.content, speakerColor, borderColor, showTypingCursor);
+                    }
+                }
+
+                // 토론 요약
+                if (this.info.summary) {
+                    const isTyping = this.info.summary && !this.info.summary.endsWith('.') && !this.info.summary.endsWith('!') && !this.info.summary.endsWith('?');
+                    content += this.createInfoBlock('📝 WOW Point', this.info.summary, '#FFF9C4', '#F57F17', isTyping);
+                }
+
+                return content;
+            }
+
+            createInfoBlock(title, content, bgColor, borderColor, showTypingCursor = false) {
+                return `
+                    <div style="background-color: ${bgColor}; padding: 8px 12px; border-radius: 8px; margin: 4px 0; border-left: 4px solid ${borderColor};">
+                        <strong style="color: #333; font-size: 0.9em;">${title}</strong><br>
+                        ${Utils.formatResponse(content)}${showTypingCursor ? '<span class="typing-cursor" style="animation: blink 1s infinite;">|</span>' : ''}
+                    </div>
+                `;
+            }
+
+            createSpeechBlock(speakerName, content, bgColor, borderColor, showTypingCursor = false) {
+                return `
+                    <div style="background-color: ${bgColor}; padding: 8px 12px; border-radius: 8px; margin: 4px 0; border-left: 4px solid ${borderColor};">
+                        <strong style="color: #333; font-size: 0.9em;">${speakerName}</strong><br>
+                        ${Utils.formatResponse(content)}${showTypingCursor ? '<span class="typing-cursor" style="animation: blink 1s infinite;">|</span>' : ''}
+                    </div>
+                `;
+            }
+        }
+
+        // ===== MAIN CHAT CLASS =====
+        class ChatTest {
+            constructor() {
+                this.initializeElements();
+                this.initializeState();
+                this.bindEvents();
+                this.discussionManager = new DiscussionManager();
+                this.setupResizableLayout();
+            }
+
+            initializeElements() {
+                this.apiUrl = document.getElementById('apiUrl');
+                this.userId = document.getElementById('userId');
+                this.sessionId = document.getElementById('sessionId');
+                this.cookieValue = document.getElementById('cookieValue');
+                this.chatMessages = document.getElementById('chatMessages');
+                this.chatInput = document.getElementById('chatInput');
+                this.sendButton = document.getElementById('sendButton');
+                this.chatForm = document.getElementById('chatForm');
+                this.statusIndicator = document.getElementById('statusIndicator');
+                this.statusText = document.getElementById('statusText');
+                this.typingIndicator = document.getElementById('typingIndicator');
+                this.typingText = document.getElementById('typingText');
+                this.logContent = document.getElementById('logContent');
+                this.mainContainer = document.querySelector('.main-container');
+                this.chatContainer = document.querySelector('.chat-container');
+                this.executionLog = document.querySelector('.execution-log');
+                this.resizer = document.getElementById('verticalResizer');
+            }
+                
+            initializeState() {
+                this.isConnected = false;
+                this.fullResponse = ''; // 전체 응답을 저장할 변수
+                this.multiLLMResponse = ''; // MULTI_LLM 응답을 저장할 변수
+                this.llmMessage = null; // LLM 전용 메시지 요소
+                this.eventSequence = []; // 이벤트 순서 추적
+                this.currentEventIndex = 0; // 현재 이벤트 인덱스
+                this.combinedResponse = ''; // 통합된 응답
+                this.isStreamingComplete = false; // 스트리밍 완료 여부
+                this.currentLLMMessage = null; // 현재 LLM 메시지 요소
+                this.currentMultiLLMMessage = null; // 현재 MULTI_LLM 메시지 요소
+                this.currentLLMRole = null; // 현재 LLM 발화자
+                this.currentMultiLLMRole = null; // 현재 MULTI_LLM 발화자
+                this.currentStatusMessage = null; // 현재 STATUS 메시지 요소
+                this.logStreamConnection = null; // 로그 스트림 연결
+                this.currentSessionId = null; // 현재 세션 ID 저장
+                this.selectedTools = new Set(); // 선택된 도구 목록
+                this.updateStatus('disconnected', '연결 대기 중...');
+                this.ssoLoginAndExtractUserId();
+                this.startLogStreaming(); // 로그 스트리밍 시작
+                this.initializeToolFilters(); // 도구 필터 초기화
+                
+                // 초기 세션 ID 생성 (UUID 사용)
+                const initialSessionId = Utils.generateUUID();
+                this.currentSessionId = initialSessionId;
+                this.sessionId.value = initialSessionId;
+                this.addLogEntry(`🆔 초기 세션 ID 생성: ${initialSessionId}`, 'info');
+            }
+
+            // ===== RESIZABLE LAYOUT =====
+            setupResizableLayout() {
+                if (!this.mainContainer || !this.chatContainer || !this.executionLog || !this.resizer) return;
+
+                const saved = this.getSavedSplit();
+                if (saved && !this.executionLog.classList.contains('collapsed')) {
+                    this.applySplit(saved);
+                }
+
+                let isDragging = false;
+                let startX = 0;
+                let startChatPercent = saved ?? 72; // default chat width percent
+
+                const onMouseMove = (e) => {
+                    if (!isDragging) return;
+                    const rect = this.mainContainer.getBoundingClientRect();
+                    const containerWidth = rect.width;
+                    if (containerWidth <= 0) return;
+
+                    const resizerWidth = this.resizer.getBoundingClientRect().width || 6;
+                    const minChatPx = 380;
+                    const minLogPx = 280;
+
+                    // Position relative to container
+                    let relativeX = e.clientX - rect.left;
+                    // Convert to percent for chat panel (space left of resizer)
+                    let chatPercent = (relativeX / containerWidth) * 100;
+
+                    // Clamp by min widths
+                    const minChatPercent = (minChatPx / containerWidth) * 100;
+                    const minLogPercent = (minLogPx / containerWidth) * 100;
+                    const maxChatPercent = 100 - minLogPercent - ((resizerWidth / containerWidth) * 100);
+                    chatPercent = Math.max(minChatPercent, Math.min(maxChatPercent, chatPercent));
+
+                    this.applySplit(chatPercent);
+                    startChatPercent = chatPercent;
+                };
+
+                const stopDragging = () => {
+                    if (!isDragging) return;
+                    isDragging = false;
+                    this.mainContainer.classList.remove('resizing');
+                    this.resizer.classList.remove('active');
+                    this.saveSplit(startChatPercent);
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', stopDragging);
+                };
+
+                this.resizer.addEventListener('mousedown', (e) => {
+                    if (this.executionLog.classList.contains('collapsed')) return;
+                    isDragging = true;
+                    startX = e.clientX;
+                    this.mainContainer.classList.add('resizing');
+                    this.resizer.classList.add('active');
+                    window.addEventListener('mousemove', onMouseMove);
+                    window.addEventListener('mouseup', stopDragging);
+                });
+
+                window.addEventListener('resize', () => {
+                    const p = this.getSavedSplit();
+                    if (p && !this.executionLog.classList.contains('collapsed')) {
+                        this.applySplit(p);
+                    }
+                });
+            }
+
+            getSavedSplit() {
+                try {
+                    const v = localStorage.getItem('chat_log_split_percent');
+                    const num = v ? parseFloat(v) : NaN;
+                    if (Number.isFinite(num) && num > 0 && num < 100) return num;
+                } catch (_) {}
+                return null;
+            }
+
+            saveSplit(chatPercent) {
+                try { localStorage.setItem('chat_log_split_percent', String(chatPercent)); } catch (_) {}
+            }
+
+            applySplit(chatPercent) {
+                const rect = this.mainContainer.getBoundingClientRect();
+                const containerWidth = rect.width || 1;
+                const resizerWidth = this.resizer ? (this.resizer.getBoundingClientRect().width || 6) : 6;
+                const resizerPercent = (resizerWidth / containerWidth) * 100;
+                const logPercent = Math.max(0, 100 - chatPercent - resizerPercent);
+                this.chatContainer.style.flex = `0 0 ${chatPercent}%`;
+                this.executionLog.style.flex = `0 0 ${logPercent}%`;
+            }
+
+            bindEvents() {
+                this.chatForm.addEventListener('submit', (e) => this.handleSubmit(e));
+                this.cookieValue.addEventListener('input', () => this.ssoLoginAndExtractUserId());
+                this.sessionId.addEventListener('input', () => this.updateSessionId());
+            }
+
+            // ===== TOOL FILTER MANAGEMENT =====
+            initializeToolFilters() {
+                const toolButtons = document.querySelectorAll('.tool-filter-btn');
+                toolButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        const tool = button.getAttribute('data-tool');
+                        this.toggleTool(tool);
+                    });
+                });
+            }
+
+            toggleTool(tool) {
+                const button = document.getElementById(`tool-${tool}`);
+                if (!button) return;
+
+                if (this.selectedTools.has(tool)) {
+                    this.selectedTools.delete(tool);
+                    button.classList.remove('active');
+                } else {
+                    this.selectedTools.add(tool);
+                    button.classList.add('active');
+                }
+
+                // 선택된 도구 로그 출력
+                const toolsList = Array.from(this.selectedTools).join(', ');
+                if (toolsList) {
+                    this.addLogEntry(`🔧 도구 필터: ${toolsList}`, 'info');
+                } else {
+                    this.addLogEntry(`🔧 도구 필터: 없음 (모든 도구 사용)`, 'info');
+                }
+            }
+
+            getSelectedToolsString() {
+                if (this.selectedTools.size === 0) {
+                    return null; // 선택된 도구가 없으면 null 반환 (모든 도구 사용)
+                }
+                return Array.from(this.selectedTools).join(',');
+            }
+
+            // ===== SESSION MANAGEMENT =====
+            updateSessionId() {
+                const sessionIdValue = this.sessionId.value.trim();
+                if (sessionIdValue) {
+                    this.currentSessionId = sessionIdValue;
+                    this.addLogEntry(`🆔 세션 ID 설정: ${sessionIdValue}`, 'info');
+                } else {
+                    this.currentSessionId = null;
+                    this.addLogEntry(`🆔 세션 ID 초기화됨`, 'info');
+                }
+            }
+
+            getSessionId() {
+                // 입력 필드에 값이 있으면 사용, 없으면 현재 세션 ID 사용, 둘 다 없으면 새로 생성
+                const inputSessionId = this.sessionId.value.trim();
+                if (inputSessionId) {
+                    return inputSessionId;
+                }
+                
+                if (this.currentSessionId) {
+                    return this.currentSessionId;
+                }
+                
+                // 새로운 세션 ID 생성 (UUID 사용)
+                this.currentSessionId = Utils.generateUUID();
+                this.sessionId.value = this.currentSessionId; // 입력 필드에도 설정
+                this.addLogEntry(`🆔 새 세션 ID 생성: ${this.currentSessionId}`, 'info');
+                return this.currentSessionId;
+            }
+
+            // ===== LOG STREAMING =====
+            async startLogStreaming() {
+                try {
+                    const apiBaseUrl = this.apiUrl.value.replace('/caia/api/v1/chat/stream', '');
+                    const currentSessionId = this.getSessionId();
+                    const logStreamUrl = `${apiBaseUrl}/logs/stream?session_id=${encodeURIComponent(currentSessionId)}`;
+                    
+                    this.addLogEntry(`🔗 로그 스트림 연결 시작: ${logStreamUrl}`, 'info');
+                    
+                    const response = await fetch(logStreamUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'text/event-stream',
+                            'Cache-Control': 'no-cache'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    this.logStreamConnection = response;
+                    this.addLogEntry(`✅ 로그 스트림 연결 성공`, 'completed');
+                    
+                    // 로그 스트림 처리
+                    await this.handleLogStream(response);
+                    
+                } catch (error) {
+                    this.addLogEntry(`❌ 로그 스트림 연결 실패: ${error.message}`, 'error');
+                    // 5초 후 재시도
+                    setTimeout(() => this.startLogStreaming(), 5000);
+                }
+            }
+
+            async handleLogStream(response) {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const data = line.slice(6);
+                                
+                                if (data === '[DONE]') {
+                                    this.addLogEntry(`🏁 로그 스트림 종료`, 'completed');
+                                    return;
+                                }
+
+                                try {
+                                    const parsed = JSON.parse(data);
+                                    if (parsed.event_type === 'STATUS') {
+                                        this.handleServerLogEvent(parsed);
+                                    }
+                                } catch (e) {
+                                    // JSON 파싱 실패 시 무시
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    this.addLogEntry(`❌ 로그 스트림 처리 오류: ${error.message}`, 'error');
+                } finally {
+                    reader.releaseLock();
+                    // 연결이 끊어진 경우 재연결 시도
+                    setTimeout(() => this.startLogStreaming(), 3000);
+                }
+            }
+
+            // ===== SSO LOGIN =====
+            async ssoLoginAndExtractUserId() {
+                if (!this.cookieValue || !this.userId) return;
+
+                const ssolgenetExa = this.cookieValue.value.trim();
+                if (!ssolgenetExa) {
+                    this.userId.value = '';
+                    return;
+                }
+                try {
+                    this.addLogEntry(`🔍 SSO 로그인 시작: ${ssolgenetExa.substring(0, 50)}...`, 'info');
+
+                    const apiBaseUrl = this.apiUrl.value.replace('/caia/api/v1/chat/stream', '');
+                    const ssoLoginUrl = `${apiBaseUrl}/caia/api/v1/user/sso_login?ssolgenet_exa=${encodeURIComponent(ssolgenetExa)}`;
+                    
+                    this.addLogEntry(`🌐 SSO 로그인 API 호출: ${ssoLoginUrl}`, 'info');
+                    
+                    const response = await fetch(ssoLoginUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json, text/plain, */*',
+                            'Accept-Encoding': 'gzip, deflate, br, zstd',
+                            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+                            'Cache-Control': 'no-cache',
+                            'Connection': 'keep-alive'
+                        }
+                    });
+
+                    this.addLogEntry(`📡 SSO 로그인 응답 상태: ${response.status} ${response.statusText}`, 'info');
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.status && data.data && data.data.user_id) {
+                            this.userId.value = data.data.user_id;
+                            this.addLogEntry(`👤 SSO 로그인 성공: ${data.data.user_id} (${data.data.name})`, 'completed');
+                        } else {
+                            this.userId.value = '';
+                            this.addLogEntry(`⚠️ SSO 로그인 실패: ${data.message || '사용자 정보를 찾을 수 없습니다'}`, 'error');
+                        }
+                    } else {
+                        this.userId.value = '';
+                        const errorText = await response.text();
+                        this.addLogEntry(`⚠️ SSO 로그인 실패: ${response.status} ${response.statusText}`, 'error');
+                        this.addLogEntry(`📄 오류 내용: ${errorText}`, 'error');
+                    }
+                } catch (error) {
+                    this.userId.value = '';
+                    this.addLogEntry(`⚠️ SSO 로그인 오류: ${error.message}`, 'error');
+                }
+            }
+
+            // ===== LOG MANAGEMENT =====
+            addLogEntry(message, type = 'info', includeTimestamp = true) {
+                if (!this.logContent) return;
+
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${type}`;
+                
+                if (includeTimestamp && !message.includes(' - ')) {
+                    // 메시지에 타임스탬프가 포함되어 있지 않은 경우에만 추가
+                    const timestamp = Utils.getCurrentTime();
+                    logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span>${message}`;
+                } else {
+                    // 메시지에 이미 타임스탬프가 포함되어 있는 경우
+                    logEntry.innerHTML = message;
+                }
+                
+                this.logContent.appendChild(logEntry);
+                
+                // 로그 항목 수 제한 (성능 최적화)
+                this.limitLogEntries();
+                
+                // 부드러운 자동 스크롤
+                this.scrollLogToBottom();
+            }
+
+            scrollLogToBottom() {
+                // 자동 스크롤 비활성화
+                // if (!this.logContent) return;
+                // 
+                // // requestAnimationFrame을 사용하여 부드러운 스크롤
+                // requestAnimationFrame(() => {
+                //     this.logContent.scrollTo({
+                //         top: this.logContent.scrollHeight,
+                //         behavior: 'smooth'
+                //     });
+                // });
+            }
+
+            // 로그 항목 수 제한 (성능 최적화)
+            limitLogEntries() {
+                if (!this.logContent) return;
+                
+                const maxEntries = 200; // 최대 200개 로그 항목 유지
+                const entries = this.logContent.querySelectorAll('.log-entry');
+                
+                if (entries.length > maxEntries) {
+                    // 오래된 로그 항목들 제거
+                    const entriesToRemove = entries.length - maxEntries;
+                    for (let i = 0; i < entriesToRemove; i++) {
+                        entries[i].remove();
+                    }
+                }
+            }
+
+            clearLog() {
+                if (this.logContent) {
+                    this.logContent.innerHTML = '';
+                }
+            }
+
+            // ===== STATUS MANAGEMENT =====
+            updateStatus(status, text) {
+                if (this.statusIndicator) {
+                    this.statusIndicator.className = `status-indicator status-${status}`;
+                }
+                if (this.statusText) {
+                    this.statusText.textContent = text;
+                }
+                this.isConnected = status === 'connected';
+            }
+
+            updateTypingText(message) {
+                if (this.typingText) {
+                    this.typingText.textContent = message;
+                }
+            }
+
+            // ===== MESSAGE MANAGEMENT =====
+            addMessage(content, isUser = false, isStreaming = false, eventType = null, llmRole = null) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+                
+                let cssClasses = 'message-content';
+                if (isStreaming) cssClasses += ' streaming';
+                
+                // 이벤트 타입별 CSS 클래스 추가
+                if (eventType) {
+                    cssClasses += ` event-${eventType.toLowerCase()}`;
+                }
+                
+                // MULTI_LLM의 경우 llm_role별 CSS 클래스 추가
+                if (eventType === 'MULTI_LLM' && llmRole) {
+                    const roleClass = this.getRoleClass(llmRole);
+                    if (roleClass) {
+                        cssClasses += ` ${roleClass}`;
+                        console.log('Added role class:', roleClass, 'for role:', llmRole);
+                    }
+                }
+                
+                console.log('Final CSS classes:', cssClasses);
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = cssClasses;
+
+                contentDiv.innerHTML = content;
+                
+                messageDiv.appendChild(contentDiv);
+                this.chatMessages.appendChild(messageDiv);
+                this.scrollToBottom();
+                
+                return contentDiv;
+            }
+
+            // llm_role을 CSS 클래스로 변환하는 헬퍼 함수
+            getRoleClass(llmRole) {
+                const roleMap = {
+                    'HOST': 'role-host',
+                    'CRISIS_EXPERT': 'role-crisis-expert',
+                    'GLOBAL_MARKETING_EXPERT': 'role-global-marketing-expert',
+                    'PRODUCT_EXPERT': 'role-product-expert',
+                    'CX_EXPERT': 'role-cx-expert',
+                    'TREND_EXPERT': 'role-trend-expert',
+                    'STARTUP_EXPERT': 'role-startup-expert',
+                    'BRAND_EXPERT': 'role-brand-expert',
+                    '마케팅·브랜드 전략 전문가': 'role-brand-expert',
+                    '문화·라이프스타일 트렌드 전문가': 'role-trend-expert',
+                    '혁신·스타트업 동향 전문가': 'role-startup-expert',
+                    '고객경험(CX)·서비스 혁신 전문가': 'role-cx-expert',
+                    '제품·기술 혁신(R&D) 전문가': 'role-product-expert',
+                    '토론 진행자': 'role-host'
+                };
+                return roleMap[llmRole] || null;
+            }
+
+            scrollToBottom() {
+                // 자동 스크롤 비활성화
+                // this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+            }
+
+            // ===== FORM HANDLING =====
+            async handleSubmit(e) {
+                e.preventDefault();
+                
+                const message = this.chatInput.value.trim();
+                if (!message) return;
+
+                this.clearLog();
+                this.addLogEntry(`🚀 채팅 요청 시작: "${message}"`, 'info');
+
+                this.addMessage(message, true);
+                this.chatInput.value = '';
+                this.sendButton.disabled = true;
+                this.updateStatus('connecting', '연결 중...');
+
+                this.typingIndicator.classList.add('show');
+
+                try {
+                    await this.sendMessage(message, null);
+                } catch (error) {
+                    this.addLogEntry(`❌ 오류 발생: ${error.message}`, 'error');
+                    // 에러 메시지 표시
+                    this.addMessage(`❌ 오류가 발생했습니다: ${error.message}`, false, false, 'ERROR');
+                    this.updateStatus('disconnected', '연결 실패');
+                } finally {
+                    this.typingIndicator.classList.remove('show');
+                    this.sendButton.disabled = false;
+                }
+            }
+
+            // ===== API COMMUNICATION =====
+            async sendMessage(message, assistantMessage) {
+                let url = this.apiUrl.value;
+                const userId = this.userId.value;
+                const sessionId = this.getSessionId();
+                const cookieValue = this.cookieValue.value;
+
+                // 선택된 도구를 쿼리 파라미터로 추가
+                const selectedTools = this.getSelectedToolsString();
+                if (selectedTools) {
+                    try {
+                        const urlObj = new URL(url);
+                        urlObj.searchParams.set('tools', selectedTools);
+                        url = urlObj.toString();
+                    } catch (e) {
+                        // URL 파싱 실패 시 쿼리 파라미터를 직접 추가
+                        const separator = url.includes('?') ? '&' : '?';
+                        url = `${url}${separator}tools=${encodeURIComponent(selectedTools)}`;
+                    }
+                }
+
+                const cookies = {};
+                if (cookieValue) {
+                    cookieValue.split(';').forEach(cookie => {
+                        const [name, value] = cookie.trim().split('=');
+                        if (name && value) {
+                            cookies[name] = value;
+                        }
+                    });
+                }
+
+                const requestBody = {
+                    question: message,
+                    user_id: userId,
+                    message_filter: "LGE",
+                    chat_filter: "LGSSCHAT",
+                    chat_group_id: sessionId,
+                    api_version: "GPT4.1-CHAT",
+                    meta: {
+                        user_id: ["lge_raih_info", "lge_map"],
+                        file_document_id: []
+                    },
+                    checked: false
+                };
+
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream',
+                    'Cache-Control': 'no-cache'
+                };
+
+                if (Object.keys(cookies).length > 0) {
+                    headers['Cookie'] = Object.entries(cookies)
+                        .map(([name, value]) => `${name}=${value}`)
+                        .join('; ');
+                }
+
+                this.addLogEntry(`📤 요청 전송: ${url}`, 'info');
+                this.addLogEntry(`👤 User ID: ${userId}`, 'info');
+                this.addLogEntry(`🆔 Session ID: ${sessionId}`, 'info');
+                if (selectedTools) {
+                    this.addLogEntry(`🔧 도구 필터: ${selectedTools}`, 'info');
+                }
+                this.addLogEntry(`🍪 Cookie: ${cookieValue.substring(0, 50)}...`, 'info');
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                this.addLogEntry(`✅ 응답 수신: ${response.status} ${response.statusText}`, 'completed');
+                this.updateStatus('connected', '연결됨');
+                await this.handleStreamResponse(response, assistantMessage);
+            }
+
+            // ===== STREAM RESPONSE HANDLING =====
+            async handleStreamResponse(response, assistantMessage) {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                this.fullResponse = ''; // 인스턴스 변수로 초기화
+                this.multiLLMResponse = ''; // MULTI_LLM 응답 버퍼 초기화
+                this.llmMessage = null; // LLM 전용 메시지 초기화
+                this.currentAssistantMessage = assistantMessage; // 현재 활성 메시지 추적
+                this.eventSequence = []; // 이벤트 순서 초기화
+                this.currentEventIndex = 0; // 이벤트 인덱스 초기화
+                this.combinedResponse = ''; // 통합된 응답 초기화
+                this.isStreamingComplete = false; // 스트리밍 완료 여부 초기화
+                this.currentLLMMessage = null; // 현재 LLM 메시지 초기화
+                this.currentMultiLLMMessage = null; // 현재 MULTI_LLM 메시지 초기화
+                this.currentLLMRole = null; // 현재 LLM 발화자 초기화
+                this.currentMultiLLMRole = null; // 현재 MULTI_LLM 발화자 초기화
+                this.currentStatusMessage = null; // 현재 STATUS 메시지 초기화
+                let isCompleted = false;
+
+                try {
+                    while (true) {
+                        let done, value;
+                        try {
+                            const readPromise = reader.read();
+                            const timeoutPromise = new Promise((_, reject) => 
+                                setTimeout(() => reject(new Error('Read timeout')), 10000)
+                            );
+                            
+                            const result = await Promise.race([readPromise, timeoutPromise]);
+                            done = result.done;
+                            value = result.value;
+                            
+                            if (done) break;
+                        } catch (readError) {
+                            if (readError.message === 'Read timeout') {
+                                continue;
+                            }
+                            break;
+                        }
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const data = line.slice(6);
+                            
+                                if (data === '[DONE]') {
+                                    if (assistantMessage) {
+                                        assistantMessage.classList.remove('streaming');
+                                    }
+                                    this.updateStatus('connected', '연결됨');
+                                    return;
+                                }
+
+                                try {
+                                    const parsed = JSON.parse(data);
+                                    this.handleSSEEvent(parsed);
+                                } catch (e) {
+                                    // JSON 파싱 실패 시 무시
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    if (assistantMessage) {
+                        assistantMessage.innerHTML = `❌ 오류가 발생했습니다: ${error.message}`;
+                        assistantMessage.classList.remove('streaming');
+                    } else {
+                        // assistantMessage가 없으면 새로운 메시지 생성
+                        this.addMessage(`❌ 오류가 발생했습니다: ${error.message}`, false, false, 'ERROR');
+                    }
+                    this.updateStatus('disconnected', '오류 발생');
+                } finally {
+                    reader.releaseLock();
+                    
+                    if (!isCompleted) {
+                        if (assistantMessage) {
+                            assistantMessage.classList.remove('streaming');
+                        }
+                        this.updateStatus('connected', '연결됨');
+                    }
+                }
+            }
+
+            // ===== SSE EVENT HANDLING =====
+            handleSSEEvent(parsed) {
+                console.log('SSE Event received:', parsed.event_type, parsed);
+                switch (parsed.event_type) {
+                    case 'INIT':
+                        this.addLogEntry(`🚀 AI 답변 시작`, 'info');
+                        break;
+                    
+                    case 'STATUS':
+                        this.handleStatusEvent(parsed);
+                        break;
+                    
+                    case 'ANALYSIS_STATUS':
+                        if (parsed.event_data && parsed.event_data.status) {
+                            this.addLogEntry(`🔍 ANALYSIS_STATUS: ${parsed.event_data.status}`, 'processing');
+                            // ANALYSIS_STATUS 이벤트는 로그만 표시하고 메시지는 업데이트하지 않음
+                        }
+                        break;
+                                    
+                    case 'LLM':
+                        this.handleLLMEvent(parsed);
+                        break;
+                                    
+                    case 'MULTI_LLM':
+                        this.handleMultiLLMEvent(parsed);
+                        break;
+                                    
+                    case 'ACTION_BUTTON':
+                        this.handleActionButtonEvent(parsed);
+                        break;
+                                    
+                    case 'USER_SEARCH':
+                        this.handleUserSearchEvent(parsed);
+                        break;
+                                    
+                    case 'MAIL_TO_EVENT':
+                        this.handleMailToEventEvent(parsed);
+                        break;
+                                    
+                    case 'MAIL_TODO_BRIEFING':
+                        this.handleMailTodoBriefingEvent(parsed);
+                        break;
+                                    
+                    case 'MAIL_LINK':
+                        this.handleMailLinkEvent(parsed);
+                        break;
+                                    
+                    case 'EVENT_LINK':
+                        this.handleEventLinkEvent(parsed);
+                        break;
+                                    
+                    case 'PERSON_IN_CHARGE_SEARCH':
+                        this.handlePersonInChargeSearchEvent(parsed);
+                        break;
+                                    
+                    case 'DOCUMENTS':
+                        this.handleDocumentsEvent(parsed);
+                        break;
+                                    
+                    case 'QUESTION_SUGGEST':
+                        this.handleQuestionSuggestEvent(parsed);
+                        break;
+                                    
+                    case 'SERVER_LOG':
+                        this.handleServerLogEvent(parsed);
+                        break;
+                                    
+                    case 'CLOSE':
+                        this.addLogEntry(`🏁 AI 답변 완료`, 'completed');
+                        // CLOSE 이벤트 시 STATUS 메시지 제거
+                        if (this.currentStatusMessage) {
+                            this.currentStatusMessage.parentElement.remove();
+                            this.currentStatusMessage = null;
+                        }
+                        // CLOSE 이벤트는 로그만 표시
+                        this.updateStatus('connected', '연결됨');
+                        break;
+                                    
+                    case 'ERROR':
+                        this.addLogEntry(`❌ 오류: ${parsed.token || '알 수 없는 오류'}`, 'error');
+                        // ERROR 이벤트는 새로운 메시지로 표시
+                        const errorMessage = `❌ 오류가 발생했습니다: ${parsed.token || '알 수 없는 오류'}`;
+                        this.addMessage(errorMessage, false, false, 'ERROR');
+                        this.updateStatus('disconnected', '오류 발생');
+                        break;
+                                    
+                    case 'TOOL_COMPLETE':
+                        if (parsed.event_data && parsed.event_data.message) {
+                            this.addLogEntry(`✅ ${parsed.event_data.message}`, 'completed');
+                        }
+                        break;
+                                    
+                    case 'DISCUSSION_START':
+                        this.addLogEntry(`🎯 토론 시작: ${parsed.event_data?.message || '토론을 준비하고 있습니다...'}`, 'processing');
+                        this.discussionManager.reset();
+                        break;
+                    
+                    case 'DISCUSSION_TOPIC':
+                        this.handleDiscussionTopic(parsed);
+                        break;
+                    
+                    case 'DISCUSSION_SPEAKERS':
+                        this.handleDiscussionSpeakers(parsed);
+                        break;
+                    
+                    case 'DISCUSSION_MATERIALS':
+                        this.handleDiscussionMaterials(parsed);
+                        break;
+                    
+                    case 'DISCUSSION_RUNNING':
+                        this.handleDiscussionRunning(parsed);
+                        break;
+                    
+                    case 'DISCUSSION_RESULT':
+                        this.handleDiscussionResult(parsed);
+                        break;
+                    
+                    case 'DISCUSSION_NODE':
+                        const nodeMessage = parsed.event_data?.message || '토론 노드를 실행하고 있습니다...';
+                        this.addLogEntry(`🔄 ${nodeMessage}`, 'processing');
+                        break;
+                    
+                    case 'DISCUSSION_END':
+                        this.addLogEntry(`✅ 토론 완료`, 'completed');
+                        this.finalizeDiscussionDisplay();
+                        break;
+                }
+            }
+
+            // ===== NEW EVENT HANDLERS =====
+            handleLLMEvent(parsed) {
+                // done: true인 이벤트 처리
+                if (parsed.done === true) {
+                    this.addLogEntry(`🏁 LLM 응답 완료`, 'completed');
+                    // done: true인 경우 현재 LLM 메시지 완료 처리 및 줄바꿈 추가
+                    if (this.currentLLMMessage) {
+                        this.currentLLMMessage.classList.remove('streaming');
+                        // 두 줄 바꿈 추가
+                        this.fullResponse += '\n\n';
+                        const formattedResponse = Utils.formatResponse(this.fullResponse);
+                        this.currentLLMMessage.innerHTML = formattedResponse;
+                        this.scrollToBottom();
+                    }
+                    // 발화자 정보 및 메시지 초기화 (새로운 발화자를 위해)
+                    this.currentLLMRole = null;
+                    this.currentLLMMessage = null;
+                    return;
+                }
+
+                // done: false인 경우만 처리
+                if (parsed.token !== undefined && parsed.token !== '') {
+                    // 첫 번째 토큰인 경우 새로운 메시지 생성
+                    if (!this.currentLLMMessage) {
+                        // 발화자 정보 설정
+                        this.currentLLMRole = parsed.event_data?.llm_role || 'LLM';
+                        
+                        // 발화자 정보가 있으면 메시지에 포함
+                        let initialContent = '';
+                        if (this.currentLLMRole && this.currentLLMRole !== 'LLM') {
+                            initialContent = `**${this.currentLLMRole}**\n\n`;
+                        }
+                        
+                        this.currentLLMMessage = this.addMessage(initialContent, false, true, 'LLM');
+                        this.fullResponse = initialContent;
+                    }
+                    
+                    // 토큰 추가 (한글자씩 스트리밍)
+                    this.fullResponse += parsed.token;
+                    const formattedResponse = Utils.formatResponse(this.fullResponse) + '<span class="typing-cursor">|</span>';
+                    
+                    // 자연스러운 타이핑 효과를 위한 약간의 지연
+                    setTimeout(() => {
+                        this.currentLLMMessage.innerHTML = formattedResponse;
+                        this.scrollToBottom();
+                    }, 10);
+                }
+            }
+
+            handleMultiLLMEvent(parsed) {
+                // 디버깅을 위한 로그 추가
+                console.log('MULTI_LLM Event:', parsed);
+                
+                // done: true인 이벤트 처리
+                if (parsed.done === true) {
+                    this.addLogEntry(`🏁 MULTI_LLM 응답 완료`, 'completed');
+                    // done: true인 경우 현재 MULTI_LLM 메시지 완료 처리 및 줄바꿈 추가
+                    if (this.currentMultiLLMMessage) {
+                        this.currentMultiLLMMessage.classList.remove('streaming');
+                        // 두 줄 바꿈 추가
+                        this.multiLLMResponse += '\n\n';
+                        const formattedResponse = Utils.formatResponse(this.multiLLMResponse);
+                        this.currentMultiLLMMessage.innerHTML = formattedResponse;
+                        this.scrollToBottom();
+                    }
+                    // 발화자 정보 및 메시지 초기화 (새로운 발화자를 위해)
+                    this.currentMultiLLMRole = null;
+                    this.currentMultiLLMMessage = null;
+                    return;
+                }
+
+                // done: false인 경우만 처리
+                if (parsed.token) {
+                    // 첫 번째 토큰인 경우 새로운 메시지 생성
+                    if (!this.currentMultiLLMMessage) {
+                        // 발화자 정보 설정
+                        this.currentMultiLLMRole = parsed.event_data?.llm_role || '';
+                        console.log('New MULTI_LLM speaker:', this.currentMultiLLMRole);
+                        
+                        // 발화자 정보가 있으면 메시지에 포함
+                        let initialContent = '';
+                        if (this.currentMultiLLMRole) {
+                            initialContent = `**${this.currentMultiLLMRole}**\n\n`;
+                        }
+                        
+                        this.currentMultiLLMMessage = this.addMessage(initialContent, false, true, 'MULTI_LLM', this.currentMultiLLMRole);
+                        this.multiLLMResponse = initialContent;
+                    }
+                    
+                    // 토큰 추가 (한글자씩 스트리밍)
+                    this.multiLLMResponse += parsed.token;
+                    const formattedResponse = Utils.formatResponse(this.multiLLMResponse) + '<span class="typing-cursor">|</span>';
+                    
+                    // 자연스러운 타이핑 효과를 위한 약간의 지연
+                    setTimeout(() => {
+                        this.currentMultiLLMMessage.innerHTML = formattedResponse;
+                        this.scrollToBottom();
+                    }, 10);
+                }
+            }
+
+            handleActionButtonEvent(parsed) {
+                if (parsed.event_data && parsed.event_data.buttons) {
+                    let content = '**액션 버튼:**\n\n';
+                    parsed.event_data.buttons.forEach(button => {
+                        const actionType = button.action.type;
+                        const actionValue = button.action.value;
+                        content += `🔘 **${button.text}**\n`;
+                        content += `   - 타입: ${actionType}\n`;
+                        content += `   - 값: ${actionValue}\n\n`;
+                    });
+                    
+                    // 새로운 메시지 생성
+                    this.addMessage(content, false, false, 'ACTION_BUTTON');
+                }
+            }
+
+            handleUserSearchEvent(parsed) {
+                if (parsed.event_data && parsed.event_data.users) {
+                    let content = '**사용자 검색 결과:**\n\n';
+                    parsed.event_data.users.forEach(user => {
+                        content += `👤 **${user.user_name}**\n`;
+                        content += `   - ID: ${user.user_id}\n`;
+                        content += `   - 직책: ${user.position}\n`;
+                        content += `   - 팀: ${user.team}\n`;
+                        content += `   - 이메일: ${user.email}\n`;
+                        content += `   - 위치: ${user.location}\n\n`;
+                    });
+                    
+                    // 새로운 메시지 생성
+                    this.addMessage(content, false, false, 'USER_SEARCH');
+                }
+            }
+
+            handleMailToEventEvent(parsed) {
+                if (parsed.event_data && parsed.event_data.meetings) {
+                    let content = '**📧 이메일 → 일정 변환:**\n\n';
+                    parsed.event_data.meetings.forEach(meeting => {
+                        content += `📅 **${meeting.title}**\n`;
+                        content += `   - 시작: ${meeting.start_datetime.datetime}\n`;
+                        content += `   - 종료: ${meeting.end_datetime.datetime}\n`;
+                        content += `   - 장소: ${meeting.location}\n`;
+                        content += `   - 참석자: ${meeting.attendees.join(', ')}\n`;
+                        content += `   - 설명: ${meeting.description}\n\n`;
+                    });
+                    
+                    // 새로운 메시지 생성
+                    this.addMessage(content, false, false, 'MAIL_TO_EVENT');
+                }
+            }
+
+            handleMailTodoBriefingEvent(parsed) {
+                if (parsed.event_data) {
+                    const data = parsed.event_data;
+                    let content = '**📧 이메일 할일 브리핑:**\n\n';
+                    
+                    if (data.total_summary) {
+                        content += `📋 **전체 요약:**\n${data.total_summary}\n\n`;
+                    }
+                    
+                    if (data.to_do_list && data.to_do_list.length > 0) {
+                        content += `✅ **할일 목록:**\n`;
+                        data.to_do_list.forEach(todo => {
+                            content += `- **${todo.type}**: ${todo.summary}\n`;
+                            if (todo.description) content += `  ${todo.description}\n`;
+                            if (todo.due_date) content += `  📅 마감: ${todo.due_date}\n`;
+                        });
+                        content += '\n';
+                    }
+                    
+                    if (data.meetings_for_create && data.meetings_for_create.length > 0) {
+                        content += `📅 **생성할 회의:**\n`;
+                        data.meetings_for_create.forEach(meeting => {
+                            content += `- **${meeting.title}**\n`;
+                            content += `  📅 ${meeting.start_datetime.datetime} ~ ${meeting.end_datetime.datetime}\n`;
+                        });
+                    }
+                    
+                    // 새로운 메시지 생성
+                    this.addMessage(content, false, false, 'MAIL_TODO_BRIEFING');
+                }
+            }
+
+            handleMailLinkEvent(parsed) {
+                if (parsed.event_data && parsed.event_data.links) {
+                    let content = '**📧 이메일 링크:**\n\n';
+                    parsed.event_data.links.forEach(link => {
+                        content += `📎 **${link.file_name}**\n`;
+                        content += `   - 타입: ${link.content_type}\n`;
+                        content += `   - 소스: ${link.source_type}\n`;
+                        content += `   - URL: ${link.source_url}\n\n`;
+                    });
+                    
+                    // 새로운 메시지 생성
+                    this.addMessage(content, false, false, 'MAIL_LINK');
+                }
+            }
+
+            handleEventLinkEvent(parsed) {
+                if (parsed.event_data && parsed.event_data.links) {
+                    let content = '**📅 일정 링크:**\n\n';
+                    parsed.event_data.links.forEach(link => {
+                        content += `📎 **${link.file_name}**\n`;
+                        content += `   - 타입: ${link.content_type}\n`;
+                        content += `   - 소스: ${link.source_type}\n`;
+                        content += `   - URL: ${link.source_url}\n\n`;
+                    });
+                    
+                    // 새로운 메시지 생성
+                    this.addMessage(content, false, false, 'EVENT_LINK');
+                }
+            }
+
+            handlePersonInChargeSearchEvent(parsed) {
+                if (parsed.event_data && parsed.event_data.person) {
+                    const person = parsed.event_data.person;
+                    let content = '**👤 담당자 정보:**\n\n';
+                    content += `👤 **${person.user_name}**\n`;
+                    content += `   - ID: ${person.user_id}\n`;
+                    content += `   - 직책: ${person.position}\n`;
+                    content += `   - 팀: ${person.team}\n`;
+                    content += `   - 이메일: ${person.email}\n`;
+                    content += `   - 위치: ${person.location}\n`;
+                    
+                    // 새로운 메시지 생성
+                    this.addMessage(content, false, false, 'PERSON_IN_CHARGE_SEARCH');
+                }
+            }
+
+            handleDocumentsEvent(parsed) {
+                if (parsed.event_data && parsed.event_data.documents) {
+                    let content = '**📚 검색된 문서:**\n\n';
+                    Object.values(parsed.event_data.documents).forEach(doc => {
+                        content += `📄 **${doc.title}**\n`;
+                        content += `   - 점수: ${doc.score}\n`;
+                        content += `   - 파일명: ${doc.filename}\n`;
+                        content += `   - 확장자: ${doc.extension}\n`;
+                        content += `   - 카테고리: ${doc.category_no}\n`;
+                        if (doc.view_url) content += `   - 보기: ${doc.view_url}\n`;
+                        content += `   - 내용: ${doc.context.substring(0, 100)}...\n\n`;
+                    });
+                    
+                    // 새로운 메시지 생성
+                    this.addMessage(content, false, false, 'DOCUMENTS');
+                }
+            }
+
+            handleStatusEvent(parsed) {
+                if (!parsed.event_data) return;
+                
+                // event_data.status가 있으면 채팅창에 표시 (DiscussionStatusEventData)
+                if (parsed.event_data.status) {
+                    const statusText = parsed.event_data.status;
+                    
+                    // 기존 STATUS 메시지가 있으면 업데이트, 없으면 새로 생성
+                    if (this.currentStatusMessage) {
+                        // 기존 메시지 내용 업데이트
+                        const statusContent = `<span class="status-icon">🔄</span> **${statusText}**`;
+                        this.currentStatusMessage.innerHTML = Utils.formatResponse(statusContent);
+                    } else {
+                        // 새로운 STATUS 메시지 생성
+                        const statusContent = `<span class="status-icon">🔄</span> **${statusText}**`;
+                        this.currentStatusMessage = this.addMessage(statusContent, false, false, 'STATUS');
+                    }
+                }
+                // event_data.log_level이 있으면 로그에 표시 (ServerLogEventData)
+                else if (parsed.event_data.log_level) {
+                    this.handleServerLogEvent(parsed);
+                }
+            }
+
+            handleQuestionSuggestEvent(parsed) {
+                if (parsed.event_data && parsed.event_data.questions) {
+                    const questions = parsed.event_data.questions;
+                    if (Array.isArray(questions) && questions.length > 0) {
+                        // 하나의 메시지에 모든 질문을 클릭 가능한 말풍선으로 표시
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = 'message assistant';
+                        const contentDiv = document.createElement('div');
+                        contentDiv.className = 'message-content event-question-suggest';
+                        
+                        // 각 질문을 클릭 가능한 아이템으로 생성
+                        questions.forEach((question) => {
+                            const questionDiv = document.createElement('div');
+                            questionDiv.className = 'question-suggest-item';
+                            questionDiv.textContent = `💡 ${question}`;
+                            questionDiv.setAttribute('data-question', question);
+                            questionDiv.addEventListener('click', () => {
+                                this.selectQuestion(question);
+                            });
+                            contentDiv.appendChild(questionDiv);
+                        });
+                        
+                        messageDiv.appendChild(contentDiv);
+                        this.chatMessages.appendChild(messageDiv);
+                        this.scrollToBottom();
+                    }
+                }
+            }
+
+            selectQuestion(question) {
+                // 질문을 쿼리창에 입력
+                if (this.chatInput) {
+                    this.chatInput.value = question;
+                    this.chatInput.focus();
+                    this.addLogEntry(`💡 질문 선택: ${question}`, 'info');
+                }
+            }
+
+            handleServerLogEvent(parsed) {
+                if (parsed.event_data) {
+                    const logData = parsed.event_data;
+                    const timestamp = logData.timestamp || Utils.getCurrentTime();
+                    const logLevel = logData.log_level || 'INFO';
+                    const loggerName = logData.logger_name || 'unknown';
+                    const message = logData.message || '';
+                    const sessionId = logData.session_id || '';
+                    
+                    // 현재 세션의 로그만 표시 (세션 ID가 없거나 현재 세션과 일치하는 경우)
+                    const currentSessionId = this.getSessionId();
+                    if (sessionId && sessionId !== currentSessionId) {
+                        return; // 다른 세션의 로그는 무시
+                    }
+                    
+                    // Health check 로그 필터링
+                    if (message.includes('[HEALTH]') || message.includes('Health check')) {
+                        return; // Health check 로그는 표시하지 않음
+                    }
+                    
+                    // INFO 레벨만 로그에 표시
+                    if (logLevel !== 'INFO') {
+                        return; // INFO가 아닌 로그는 표시하지 않음
+                    }
+                    
+                    // 서버 로그를 우측 로그 패널에 표시 (타임스탬프 포함)
+                    this.addLogEntry(`${timestamp} - ${loggerName} - ${logLevel} - ${message}`, 'info', false);
+                }
+            }
+
+            // ===== DISCUSSION EVENT HANDLERS =====
+            handleDiscussionTopic(parsed) {
+                if (parsed.token !== undefined && parsed.token !== '') {
+                    if (!this.discussionManager.info.topic) {
+                        this.discussionManager.info.topic = '';
+                    }
+                    this.discussionManager.info.topic += parsed.token;
+                    // 타이핑 효과를 위한 지연 후 화면 업데이트
+                    setTimeout(() => {
+                        this.updateDiscussionDisplay();
+                    }, 50);
+                } else if (parsed.event_data && parsed.event_data.topic) {
+                    this.discussionManager.info.topic = parsed.event_data.topic;
+                    this.updateDiscussionDisplay();
+                }
+            }
+
+            handleDiscussionSpeakers(parsed) {
+                if (parsed.token !== undefined && parsed.token !== '') {
+                    if (!this.discussionManager.info.speakersText) {
+                        this.discussionManager.info.speakersText = '';
+                    }
+                    this.discussionManager.info.speakersText += parsed.token;
+                    // 타이핑 효과를 위한 지연 후 화면 업데이트
+                    setTimeout(() => {
+                        this.updateDiscussionDisplay();
+                    }, 50);
+                } else if (parsed.event_data && parsed.event_data.speakers) {
+                    const speakers = parsed.event_data.speakers;
+                    this.discussionManager.info.speakers = speakers;
+                    this.discussionManager.info.speakersText = speakers.join(', ');
+                    this.updateDiscussionDisplay();
+                }
+            }
+
+            handleDiscussionMaterials(parsed) {
+                if (parsed.token !== undefined && parsed.token !== '') {
+                    if (!this.discussionManager.info.materials) {
+                        this.discussionManager.info.materials = '';
+                    }
+                    this.discussionManager.info.materials += parsed.token;
+                    // 타이핑 효과를 위한 지연 후 화면 업데이트
+                    setTimeout(() => {
+                        this.updateDiscussionDisplay();
+                    }, 50);
+                } else if (parsed.event_data) {
+                    const materials = parsed.event_data.materials || [];
+                    const error = parsed.event_data.error;
+                    
+                    if (materials.length > 0) {
+                        this.discussionManager.info.materials = `${materials.length}개 자료 수집 완료`;
+                    } else if (error) {
+                        this.discussionManager.info.materials = error;
+                    }
+                    
+                    this.updateDiscussionDisplay();
+                }
+            }
+
+            handleDiscussionRunning(parsed) {
+                const isDone = parsed.done === true;
+                
+                if (parsed.token !== undefined && parsed.token !== '') {
+                    const speaker = parsed.event_data?.speaker || '';
+                    const isComplete = parsed.event_data?.is_complete || false;
+                    const message = parsed.event_data?.message || '';
+                    
+                    if (message.includes('발언할 차례입니다')) {
+                        this.addLogEntry(`🎤 ${message}`, 'processing');
+                        // 새로운 발화자 시작 - 이전 발화 완료 처리
+                        if (this.discussionManager.currentSpeech) {
+                            this.discussionManager.currentSpeech.isComplete = true;
+                        }
+                    } else if (message.includes('발언을 시작합니다')) {
+                        this.addLogEntry(`🗣️ ${message}`, 'processing');
+                        // 새로운 발화 시작
+                        if (this.discussionManager.currentSpeech) {
+                            this.discussionManager.currentSpeech.isComplete = true;
+                        }
+                        this.discussionManager.currentSpeech = {
+                            speaker: speaker,
+                            content: '',
+                            isComplete: false
+                        };
+                        this.discussionManager.speeches.push(this.discussionManager.currentSpeech);
+                    } else {
+                        
+                        // 토큰을 현재 발화에 추가
+                        this.discussionManager.addToken(parsed.token, speaker, isComplete || isDone);
+                        
+                        // 타이핑 효과를 위한 지연 후 화면 업데이트
+                        setTimeout(() => {
+                            this.updateDiscussionDisplay();
+                        }, 50);
+                    }
+                } else if (parsed.event_data && parsed.event_data.error) {
+                    const error = parsed.event_data.error;
+                    const errorContent = `💬 **토론 진행**\n${error}\n\n`;
+                    
+                    // 새로운 메시지 생성
+                    this.addMessage(errorContent, false, false, 'DISCUSSION_RUNNING');
+                } else if (isDone) {
+                    // DONE: true인 경우 현재 발화 완료 처리
+                    const speaker = parsed.event_data?.speaker || '';
+                    if (speaker && this.discussionManager.currentSpeech) {
+                        this.discussionManager.currentSpeech.isComplete = true;
+                        this.updateDiscussionDisplay();
+                    }
+                }
+            }
+
+            handleDiscussionResult(parsed) {
+                if (parsed.token !== undefined && parsed.token !== '') {
+                    if (!this.discussionManager.info.summary) {
+                        this.discussionManager.info.summary = '';
+                    }
+                    this.discussionManager.info.summary += parsed.token;
+                    // 타이핑 효과를 위한 지연 후 화면 업데이트
+                    setTimeout(() => {
+                        this.updateDiscussionDisplay();
+                    }, 50);
+                } else if (parsed.event_data && parsed.event_data.summary) {
+                    this.discussionManager.info.summary = parsed.event_data.summary;
+                    this.updateDiscussionDisplay();
+                }
+            }
+
+            // ===== DISPLAY UPDATES =====
+            updateDiscussionDisplay() {
+                const content = this.discussionManager.generateDiscussionHTML();
+                
+                requestAnimationFrame(() => {
+                    this.currentAssistantMessage.innerHTML = content;
+                    this.scrollToBottom();
+                });
+            }
+
+            finalizeDiscussionDisplay() {
+                const content = this.discussionManager.generateDiscussionHTML();
+                
+                requestAnimationFrame(() => {
+                    this.currentAssistantMessage.innerHTML = content;
+                    this.currentAssistantMessage.classList.remove('streaming');
+                    this.scrollToBottom();
+                });
+            }
+
+        }
+
+        // ===== GLOBAL FUNCTIONS =====
+
+        function testUserSearch() {
+            const chatTest = window.chatTestInstance;
+            if (!chatTest) {
+                alert('채팅 인스턴스가 없습니다.');
+                return;
+            }
+            
+            const userSearchMessage = "마케팅팀 김철수님 정보를 찾아주세요";
+            document.getElementById('chatInput').value = userSearchMessage;
+            
+            const event = new Event('submit');
+            document.getElementById('chatForm').dispatchEvent(event);
+        }
+
+        function testDocuments() {
+            const chatTest = window.chatTestInstance;
+            if (!chatTest) {
+                alert('채팅 인스턴스가 없습니다.');
+                return;
+            }
+            
+            const documentsMessage = "LG전자 신제품 출시 관련 문서를 검색해주세요";
+            document.getElementById('chatInput').value = documentsMessage;
+            
+            const event = new Event('submit');
+            document.getElementById('chatForm').dispatchEvent(event);
+        }
+
+        function testActionButton() {
+            const chatTest = window.chatTestInstance;
+            if (!chatTest) {
+                alert('채팅 인스턴스가 없습니다.');
+                return;
+            }
+            
+            const actionButtonMessage = "회의 일정을 잡아주세요";
+            document.getElementById('chatInput').value = actionButtonMessage;
+            
+            const event = new Event('submit');
+            document.getElementById('chatForm').dispatchEvent(event);
+        }
+
+        function testMailToEvent() {
+            const chatTest = window.chatTestInstance;
+            if (!chatTest) {
+                alert('채팅 인스턴스가 없습니다.');
+                return;
+            }
+            
+            const mailToEventMessage = "이메일에서 회의 일정을 추출해서 캘린더에 등록해주세요";
+            document.getElementById('chatInput').value = mailToEventMessage;
+            
+            const event = new Event('submit');
+            document.getElementById('chatForm').dispatchEvent(event);
+        }
+
+        function newSession() {
+            const chatTest = window.chatTestInstance;
+            if (!chatTest) {
+                alert('채팅 인스턴스가 없습니다.');
+                return;
+            }
+            
+            // 기존 로그 스트림 연결 종료
+            if (chatTest.logStreamConnection) {
+                chatTest.logStreamConnection.abort();
+                chatTest.logStreamConnection = null;
+            }
+            
+            // 새로운 세션 ID 생성 (UUID 사용)
+            chatTest.currentSessionId = null; // 현재 세션 ID 초기화
+            const newSessionId = Utils.generateUUID();
+            chatTest.currentSessionId = newSessionId;
+            chatTest.sessionId.value = newSessionId; // 입력 필드에도 설정
+            
+            // 채팅 메시지 초기화
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-content">
+                        안녕하세요! 새로운 대화를 시작합니다. 🎉<br>
+                        질문을 입력해보세요!
+                    </div>
+                </div>
+            `;
+            
+            // 로그 초기화
+            chatTest.clearLog();
+            chatTest.addLogEntry(`🆔 새 대화 시작: ${newSessionId}`, 'info');
+            
+            // 새로운 세션에 대한 로그 스트림 재연결
+            setTimeout(() => {
+                chatTest.startLogStreaming();
+            }, 1000);
+        }
+
+        function toggleLog() {
+            const logContent = document.getElementById('logContent');
+            const toggleBtn = document.getElementById('logToggleBtn');
+            const executionLog = document.querySelector('.execution-log');
+            const chatContainer = document.querySelector('.chat-container');
+            const resizer = document.getElementById('verticalResizer');
+            
+            if (executionLog.classList.contains('collapsed')) {
+                // 로그 펼치기
+                executionLog.classList.remove('collapsed');
+                chatContainer.classList.remove('full-width');
+                toggleBtn.textContent = '접기';
+                if (resizer) resizer.style.display = '';
+                const chatTest = window.chatTestInstance;
+                if (chatTest && typeof chatTest.getSavedSplit === 'function' && typeof chatTest.applySplit === 'function') {
+                    const p = chatTest.getSavedSplit() ?? 72;
+                    chatTest.applySplit(p);
+                }
+            } else {
+                // 로그 접기
+                executionLog.classList.add('collapsed');
+                chatContainer.classList.add('full-width');
+                toggleBtn.textContent = '펼치기';
+                // Clear inline sizing so chat can truly fill
+                chatContainer.style.flex = '';
+                executionLog.style.flex = '';
+                if (resizer) resizer.style.display = 'none';
+            }
+        }
+
+        function toggleConfig() {
+            const configContent = document.getElementById('configContent');
+            const configToggle = document.getElementById('configToggle');
+            
+            if (configContent.classList.contains('collapsed')) {
+                configContent.classList.remove('collapsed');
+                configToggle.textContent = '▼';
+            } else {
+                configContent.classList.add('collapsed');
+                configToggle.textContent = '▶';
+            }
+        }
+
+        function scrollToBottom() {
+            // 자동 스크롤 비활성화
+            // const chatTest = window.chatTestInstance;
+            // if (chatTest && chatTest.logContent) {
+            //     chatTest.logContent.scrollTo({
+            //         top: chatTest.logContent.scrollHeight,
+            //         behavior: 'smooth'
+            //     });
+            // }
+        }
+
+        // ===== INITIALIZATION =====
+
+        document.addEventListener('DOMContentLoaded', () => {
+            window.chatTestInstance = new ChatTest();
+        });
+    </script>
+</body>
+</html>
