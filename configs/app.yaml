@@ -1,0 +1,135 @@
+# Application Configuration
+# 서비스 전역 설정 (환경별 오버레이)
+
+# Environment file path
+env_file: "${ENV_FILE_PATH:-../infra/compose/.env}"
+
+app:
+  name: "expert-agents"
+  version: "0.1.0"
+  environment: "development"
+  timezone: "${DEFAULT_TIMEZONE:-Asia/Seoul}"
+
+# Chat 설정
+chat:
+  default_timeout: 600  # seconds
+  max_concurrent_streams: 100
+  enable_sse: true
+  
+# MCP 서버 설정
+mcp:
+  default_transport: "stdio"
+  timeout: 600
+  retry_attempts: 3
+  rate_limit: 100  # requests per minute
+  ms_office_redirect_url: "${MS_OFFICE_REDIRECT_URL:-}"
+
+# Memory 설정
+memory:
+  provider: "mysql"  # mysql, redis, mongo
+  vector_dimension: 1536
+  ttl: 86400  # 24 hours in seconds
+  database_url: ${DATABASE_URL:-}
+  redis_url: ${REDIS_URL:-}
+
+# Database 설정
+database:
+  main:
+    host: ${MYSQL_HOST:-localhost}
+    port: ${MYSQL_PORT:-3306}
+    user: ${MYSQL_USER:-user}
+    password: "${MYSQL_PASSWORD:-password}"
+    database: ${MYSQL_DATABASE:-expert_agents}
+    charset: "utf8mb4"
+    collation: "utf8mb4_unicode_ci"
+    pool_size: ${MYSQL_POOL_SIZE:-32}
+    timezone: "${DB_TIMEZONE:-Asia/Seoul}"
+  iam:
+    host: ${NEXT_IAM_DATABASE_HOST:-localhost}
+    port: ${NEXT_IAM_DATABASE_PORT:-3306}
+    user: ${NEXT_IAM_DATABASE_USER:-user}
+    password: "${NEXT_IAM_DATABASE_PW:-password}"
+    database: ${NEXT_IAM_DATABASE_NAME:-iam}
+    charset: "utf8mb4"
+    collation: "utf8mb4_unicode_ci"
+    pool_size: ${MYSQL_POOL_SIZE:-32}
+    timezone: "${DB_TIMEZONE:-Asia/Seoul}"
+  lgenie:
+    host: ${LGENIE_DATABASE_HOST:-localhost}
+    port: ${LGENIE_DATABASE_PORT:-3306}
+    user: ${LGENIE_DATABASE_USER:-user}
+    password: "${LGENIE_DATABASE_PW:-password}"
+    database: ${LGENIE_DATABASE_NAME:-lgenie}
+    charset: "utf8mb4"
+    collation: "utf8mb4_unicode_ci"
+    pool_size: ${MYSQL_POOL_SIZE:-32}
+    timezone: "${DB_TIMEZONE:-Asia/Seoul}"
+  
+# Logging 설정
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+# API 설정
+api:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins: ["*"]
+  
+# Security 설정
+security:
+  enable_auth: false
+  jwt_secret: "your-secret-key"
+  api_key_header: "X-API-Key"
+  sso:
+    key: ${SSO_KEY:-}
+    allowed_time_diff_minutes: 720  # 12시간
+
+# LLM 설정
+llm:
+  # 동시성 제어 설정
+  concurrency:
+    max_concurrent_requests: 50  # 최대 동시 요청 수
+    rate_limit_per_minute: 500000  # 분당 최대 요청 수 (사실상 제한 없음)
+    enable_priority_queue: true  # 우선순위 큐 사용 여부
+    # Task 타입별 우선순위 (낮은 숫자가 높은 우선순위)
+    priority_config:
+      intent_analysis: 1  # 의도분석 - 최고 우선순위
+      final_response: 1  # 최종답변 - 최고 우선순위
+      analysis: 5  # 분석 - 중간 우선순위
+      search: 5  # 검색 - 중간 우선순위
+      discussion_proceed: 10  # 토론 진행 - 낮은 우선순위
+      material_collection: 10  # 자료 수집 - 낮은 우선순위
+      default: 5  # 기본 우선순위
+  providers:
+    openai:
+      api_key: ${AZURE_OPENAI_KEY:-}
+      base_url: ${AZURE_OPENAI_ENDPOINT:-}
+      api_version: ${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
+      deployment: ${AZURE_OPENAI_DEPLOYMENT:-}
+
+# Google/Gemini 설정
+google:
+  api_key: ${GOOGLE_API_KEY:-}
+  gemini:
+    api_key: ${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}
+
+# LGenie MCP 설정
+lgenie_mcp:
+  endpoint: ${LGENIE_MCP_ENDPOINT:-}
+  api_key: ${LGENIE_MCP_API_KEY:-}
+  description: "LGenie MCP server (외부 서비스)"
+  headers:
+    api_key: "X-API-Key"              # API 키 헤더
+    sso_id: "X-SSO-ID"                # SSO 사용자 ID 헤더
+  timeout: 600
+  retry_attempts: 3
+  # 기본 system_codes 설정
+  default_system_codes: ${DEFAULT_SYSTEM_CODES:-["lge_pipeline"]}
+
+  # LGenie Backend
+lgenie_backend:
+  endpoint: ${LGENIE_ENDPOINT:-}
+  description: "LGenie Backend server (외부 서비스)"
+  timeout: 600
+  retry_attempts: 3
