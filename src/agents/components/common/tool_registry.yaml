@@ -1,0 +1,81 @@
+# Tool Registry Schema
+# 에이전트가 사용할 수 있는 도구들의 스키마와 제약 조건을 정의합니다.
+# 이 파일은 ToolRegistry.get_available_tools()에서 자동으로 로드되어
+# 코드에서 발견된 도구들의 메타데이터와 병합됩니다.
+
+tools:
+  # 기존 웹 검색 도구 (Google Custom Search 기반)
+  - tool_name: web_search
+    description: Google Custom Search 기반 웹 검색을 통해 정보를 검색하고 요약합니다.
+    parameters:
+      type: object
+      properties:
+        query: 
+          type: string
+          description: 검색할 질문 또는 키워드
+        num_urls:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+          description: 검색할 URL 개수
+      required: [query]
+    constraints:
+      latency_ms: "<=30000"
+      domains: public web
+      provider: google_custom_search
+
+  # Gemini 기반 웹 검색 도구
+  - tool_name: gemini_web_search
+    description: Gemini 기반 웹 검색을 통해 최신 정보를 검색하고 요약합니다.
+    parameters:
+      type: object
+      properties:
+        query: 
+          type: string
+          description: 검색할 질문 또는 키워드
+      required: [query]
+    constraints:
+      latency_ms: "<=10000"
+      domains: public web
+      provider: google_gemini
+
+  # LLM 지식 기반 응답 도구
+  - tool_name: llm_knowledge
+    description: LLM 지식 기반 응답
+    parameters:
+      type: object
+      properties:
+        prompt: { type: string }
+        style: { type: string, enum: [concise, detailed, bullet], default: concise }
+        citations: { type: boolean, default: false }
+      required: [prompt]
+    constraints:
+      hallucination_risk: medium
+
+  # 메모리 후보 추출 도구
+  - tool_name: extract_and_save_memory_candidates
+    description: 세션 요약으로부터 semantic|episodic|procedural 메모리 후보를 추출하고 저장합니다.
+    parameters:
+      type: object
+      properties:
+        session_content: { type: string }
+        importance: { type: number, minimum: 0, maximum: 1, default: 0.7 }
+      required: [session_content]
+    constraints:
+      memory_type: [semantic, episodic, procedural]
+      category: [personal, work, family, health, finance, travel, entertainment, other]
+      source: [fact, inferred]
+      importance: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+  # MCP 도구들 (LGenie) - 동적으로 MCP에서 받아옴
+  # 다음 도구들은 MCP 서버에서 동적으로 제공되며, 이 파일에 명시적으로 정의할 필요가 없습니다:
+  # - get_events
+  # - get_mails
+  # - send_mail
+  # - retrieve_personal_knowledge
+  # - get_olap_search_data
+  # - get_employee_infos_from_human_question
+  # - retrieve_scm_knowledge
+  # - get_web_search_data (LGenie MCP에서 제공하는 웹 검색)
+  # - retrieve_coporate_knowledge
