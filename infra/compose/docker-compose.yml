@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # Expert Agents API
+  expert-agents:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+    ports:
+      - "8888:8000"
+    env_file:
+      - .env
+    environment:
+      # .env 파일에서 자동으로 로드되지만, Docker 네트워크 내부 주소를 사용하는 변수들은 명시적으로 설정
+      - APP_ENV=development
+      - APP_RELOAD=true
+      - MEMORY_PROVIDER=mysql
+      - DATABASE_URL=mysql://user:password@mysql:3306/expert_agents
+      - REDIS_URL=redis://:password@redis:6379/0
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=expert_agents
+      - LOG_LEVEL=INFO
+      - ENABLE_METRICS=true
+      - ENABLE_TRACING=true
+      # .env 파일의 변수들은 env_file을 통해 자동으로 로드됨
+      # (AZURE_OPENAI_*, GOOGLE_*, SSO_*, NEXT_IAM_*, LGENIE_* 등)
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../../src:/app/src:ro
+      - ../../configs:/app/configs:ro
+      - ../../main.py:/app/main.py:ro
+    extra_hosts:
+      - "lgedap-azure-openai.openai.azure.com:10.182.173.71"
+      - "aoai-eu2-lgedap-share.openai.azure.com:10.182.173.71"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MySQL
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: expert_agents
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql:ro
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass password
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "password", "--raw", "PING"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  
+
+volumes:
+  mysql_data:
+  redis_data:
