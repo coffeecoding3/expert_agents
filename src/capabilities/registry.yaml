@@ -1,0 +1,36 @@
+# MCP Server Registry
+# MCP (Model Context Protocol) 서버 설정을 관리합니다.
+# 이 파일은 MCPRegistryManager에서 로드되어 MCP 서버 연결에 사용됩니다.
+# 
+# 역할:
+# - 외부/내부 MCP 서버 엔드포인트 설정
+# - 서버별 인증 헤더 및 설정
+# - 서버 상태 및 스코프 관리
+#
+# 참고: Tool 스키마는 src/agents/components/common/tool_registry.yaml에 정의되어 있습니다.
+
+global:
+  rate_limit: 100
+  retry_attempts: 3
+  timeout: 30
+
+servers:
+  external:
+    lgenie-mcp:
+      description: LGenie MCP server
+      endpoint: ${LGENIE_ENDPOINT:-}/lgenie-mcp/mcp
+      headers:
+        X-API-Key: ${LGENIE_MCP_API_KEY:-}
+        mcp-session-id: ''
+        X-SSO-ID: ''
+      lgenie: true
+      scope: []
+      status: active
+      transport: http
+
+  internal:
+    llm-knowledge:
+      description: 추후 추가 예정
+      endpoint: ''
+      scope: []
+      transport: stdio
